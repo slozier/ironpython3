@@ -53,6 +53,7 @@ namespace IronPython.Compiler.Ast {
         private bool _generator;                        // The function is a generator
         private bool _isLambda;
         private bool _isAsync;
+        private ScopeStatement _classScope;
 
         // true if this function can set sys.exc_info(). Only functions with an except block can set that.
         private bool _canSetSysExcInfo;
@@ -269,8 +270,14 @@ namespace IronPython.Compiler.Ast {
                 return variable;
             }
 
+            bool isClassReference = reference.Name == "__class__";
+
             // Try to bind in outer scopes
             for (ScopeStatement parent = Parent; parent != null; parent = parent.Parent) {
+                if (isClassReference && parent is ClassDefinition) {
+                    _classScope = parent;
+                    return EnsureVariable("__class__");
+                }
                 if (parent.TryBindOuter(this, reference, out variable)) {
                     return variable;
                 }
@@ -622,6 +629,18 @@ namespace IronPython.Compiler.Ast {
             // parameters, do this after parameters have been created.
 
             CreateFunctionVariables(locals, init);
+
+            // If the __class__ variable is used the a class method then we need to initialize it.
+            // This must be done before parameter initialization (in case one of the parameters is called __class__).
+            PythonVariable pVar;
+            if (_classScope != null && TryGetVariable("__class__", out pVar)) {
+                init.Add(
+                    AssignValue(
+                        GetVariableExpression(pVar),
+                        Ast.Call(AstMethods.LookupName, _classScope.Parent.LocalContext, Ast.Constant(_classScope.Name))
+                    )
+                );
+            }
 
             // Initialize parameters - unpack tuples.
             // Since tuples unpack into locals, this must be done after locals have been created.
