@@ -19,16 +19,18 @@ namespace IronPython.Compiler.Ast {
 
         public Expression Value { get; }
 
-        public override MSAst.Expression Reduce() => Value;
+        public override MSAst.Expression Reduce() {
+            throw Runtime.Operations.PythonOps.SyntaxError("can't use starred expression here");
+        }
 
         internal override MSAst.Expression TransformSet(SourceSpan span, MSAst.Expression right, PythonOperationKind op)
             => Value.TransformSet(span, right, op);
 
         internal override string CheckAssign() => Value.CheckAssign();
 
-        internal override string CheckDelete() => Value.CheckDelete();
-
-        internal override MSAst.Expression TransformDelete() => Value.TransformDelete();
+        internal override string CheckDelete() {
+            return "can use starred expression only as assignment target";
+        }
 
         public override Type Type => Value.Type;
 

@@ -10,6 +10,7 @@ using System.Linq;
 using Microsoft.Scripting;
 using Microsoft.Scripting.Runtime;
 
+using IronPython.Runtime;
 using IronPython.Runtime.Binding;
 using IronPython.Runtime.Operations;
 
@@ -87,9 +88,12 @@ namespace IronPython.Compiler.Ast {
 
         private MSAst.Expression AssignOne() {
             Debug.Assert(_left.Length == 1);
-
             SequenceExpression seLeft = _left[0] as SequenceExpression;
             SequenceExpression seRight = Right as SequenceExpression;
+
+            if (_left[0] is StarredExpression se) {
+                throw PythonOps.SyntaxError("starred assignment target must be in a list or tuple", se.GlobalParent.SourceUnit, se.Span, (int)ErrorCodes.NoCaret);
+            }
 
             bool isStarred = seLeft != null && seLeft.Items.OfType<StarredExpression>().Any();
 

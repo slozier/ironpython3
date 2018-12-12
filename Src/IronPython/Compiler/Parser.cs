@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Text;
 
@@ -505,7 +506,7 @@ namespace IronPython.Compiler {
             foreach (Expression e in l) {
                 string delError = e.CheckDelete();
                 if (delError != null) {
-                    ReportSyntaxError(e.StartIndex, e.EndIndex, delError, ErrorCodes.SyntaxError);
+                    ReportSyntaxError(e.StartIndex, e.EndIndex, delError, ErrorCodes.SyntaxError | ErrorCodes.NoCaret);
                 }
             }
 
@@ -612,7 +613,7 @@ namespace IronPython.Compiler {
             return yieldExpression;
         }
 
-        private Statement FinishAssignments(Expression right) {
+        private AssignmentStatement FinishAssignments(Expression right) {
             List<Expression> left = null;
             Expression singleLeft = null;
 
@@ -664,31 +665,31 @@ namespace IronPython.Compiler {
 
             if (PeekToken(TokenKind.Assign)) {
                 return FinishAssignments(ret);
-            } else {
-                PythonOperator op = GetAssignOperator(PeekToken());
-                if (op != PythonOperator.None) {
-                    NextToken();
-                    Expression rhs;
+            }
 
-                    if (MaybeEat(TokenKind.KeywordYield)) {
-                        rhs = ParseYieldExpression();
-                    } else {
-                        rhs = ParseTestList();
-                    }
+            PythonOperator op = GetAssignOperator(PeekToken());
+            if (op != PythonOperator.None) {
+                NextToken();
+                Expression rhs;
 
-                    string assignError = ret.CheckAugmentedAssign();
-                    if (assignError != null) {
-                        ReportSyntaxError(assignError);
-                    }
-
-                    AugmentedAssignStatement aug = new AugmentedAssignStatement(op, ret, rhs);
-                    aug.SetLoc(_globalParent, ret.StartIndex, GetEnd());
-                    return aug;
+                if (MaybeEat(TokenKind.KeywordYield)) {
+                    rhs = ParseYieldExpression();
                 } else {
-                    Statement stmt = new ExpressionStatement(ret);
-                    stmt.SetLoc(_globalParent, ret.IndexSpan);
-                    return stmt;
+                    rhs = ParseTestList();
                 }
+
+                string assignError = ret.CheckAugmentedAssign();
+                if (assignError != null) {
+                    ReportSyntaxError(assignError);
+                }
+
+                AugmentedAssignStatement aug = new AugmentedAssignStatement(op, ret, rhs);
+                aug.SetLoc(_globalParent, ret.StartIndex, GetEnd());
+                return aug;
+            } else {
+                Statement stmt = new ExpressionStatement(ret);
+                stmt.SetLoc(_globalParent, ret.IndexSpan);
+                return stmt;
             }
         }
 
@@ -1458,6 +1459,10 @@ namespace IronPython.Compiler {
             // so we can do tupleExpr.EmitSet() or loneExpr.EmitSet()
 
             Expression lhs = MakeTupleOrExpr(l, trailingComma);
+            string assignError = lhs.CheckAssign();
+            if (assignError != null) {
+                ReportSyntaxError(lhs.StartIndex, lhs.EndIndex, assignError, ErrorCodes.SyntaxError | ErrorCodes.NoCaret);
+            }
             Eat(TokenKind.KeywordIn);
             Expression list = ParseTestList();
             var header = GetEnd();
@@ -2346,10 +2351,8 @@ namespace IronPython.Compiler {
 
         // testlist_star_expr: (test|star_expr) (',' (test|star_expr))* [',']
         private Expression ParseTestListStarExpr() {
-            if (MaybeEat(TokenKind.Multiply)) {
-                var start = GetStart();
-                var expr = new StarredExpression(ParseTest());
-                expr.SetLoc(_globalParent, start, GetEnd());
+            if (PeekToken(TokenKind.Multiply)) {
+                var expr = ParseStarExpr();
                 if (!MaybeEat(TokenKind.Comma)) {
                     return expr;
                 }
@@ -2373,10 +2376,8 @@ namespace IronPython.Compiler {
 
                 bool trailingComma = true;
                 while (true) {
-                    if (MaybeEat(TokenKind.Multiply)) {
-                        var start = GetStart();
-                        var sExpr = new StarredExpression(ParseTest());
-                        sExpr.SetLoc(_globalParent, start, GetEnd());
+                    if (PeekToken(TokenKind.Multiply)) {
+                        var sExpr = ParseStarExpr();
                         l.Add(sExpr);
                     } else {
                         if (NeverTestToken(PeekToken())) break;
@@ -2412,7 +2413,7 @@ namespace IronPython.Compiler {
 
             while (true) {
                 if (NeverTestToken(PeekToken())) break;
-                expr = ParseTest();
+                expr = PeekToken(TokenKind.Multiply) ? ParseStarExpr() : ParseTest();
                 l.Add(expr);
                 if (!MaybeEat(TokenKind.Comma)) {
                     trailingComma = false;
@@ -2449,7 +2450,7 @@ namespace IronPython.Compiler {
                 try {
                     _allowIncomplete = true;
 
-                    Expression expr = ParseTest();
+                    Expression expr = PeekToken(TokenKind.Multiply) ? ParseStarExpr() : ParseTest();
                     if (MaybeEat(TokenKind.Comma)) {
                         // "(" expression "," ...
                         ret = FinishExpressionListAsExpr(expr);
@@ -2726,6 +2727,10 @@ namespace IronPython.Compiler {
             // so we can do tupleExpr.EmitSet() or loneExpr.EmitSet()
 
             Expression lhs = MakeTupleOrExpr(l, trailingComma);
+            string assignError = lhs.CheckAssign();
+            if (assignError != null) {
+                ReportSyntaxError(lhs.StartIndex, lhs.EndIndex, assignError, ErrorCodes.SyntaxError | ErrorCodes.NoCaret);
+            }
             Eat(TokenKind.KeywordIn);
 
             Expression list = ParseOrTest();

@@ -136,14 +136,28 @@ namespace IronPython.Compiler.Ast {
         }
 
         internal override string CheckAssign() {
+            var hasStarredExpression = false;
             foreach (var item in _items) {
                 var res = item.CheckAssign();
                 if (res != null) return res;
+                if (item is StarredExpression) {
+                    if (hasStarredExpression) return "two starred expressions in assignment";
+                    hasStarredExpression = true;
+                }
             }
             return null;
         }
 
-        internal override string CheckDelete() => null;
+        internal override string CheckDelete() {
+            foreach (var item in _items) {
+                var res = item.CheckDelete();
+                if (res != null) return res;
+                if (item is StarredExpression) {
+                    return "can use starred expression only as assignment target";
+                }
+            }
+            return null;
+        }
 
         internal override string CheckAugmentedAssign()
             => CheckAssign() ?? "illegal expression for augmented assignment";
