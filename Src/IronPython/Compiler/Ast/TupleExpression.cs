@@ -35,7 +35,7 @@ namespace IronPython.Compiler.Ast {
                     return "can't assign to " + item.NodeName;
                 }
             }
-            return null;
+            return base.CheckAssign();
         }
 
         internal override string CheckDelete() {
