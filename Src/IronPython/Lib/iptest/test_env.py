@@ -27,6 +27,7 @@ if is_ironpython:
     is_netcoreapp21 = clr.TargetFramework == ".NETCoreApp,Version=v2.1"
     is_netcoreapp31 = clr.TargetFramework == ".NETCoreApp,Version=v3.1"
     is_net50 = clr.TargetFramework == ".NETCoreApp,Version=v5.0"
+    is_net60 = clr.TargetFramework == ".NETCoreApp,Version=v6.0"
     is_mono = clr.IsMono
 
 #--The bittedness of the Python implementation
